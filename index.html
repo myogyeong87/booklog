@@ -391,12 +391,12 @@ $('lookupBtn').onclick=async()=>{
         const c=cands[i];
         coverUrl=c.cover;
         if(!$('fTitle').value)$('fTitle').value=c.title;
-        if(c.author&&!$('fAuthor').value)$('fAuthor').value=c.author;
-        if(c.publisher&&!$('fPublisher').value)$('fPublisher').value=c.publisher;
+        if(c.author)$('fAuthor').value=c.author;
+        if(c.publisher)$('fPublisher').value=c.publisher;
         $('coverPrev').querySelectorAll('.cand-thumb').forEach(x=>x.classList.remove('sel'));
         el.classList.add('sel');
         toast('표지를 선택했어요 · 저장하면 함께 기록돼요');
-        if(c.isbn13&&!$('fPages').value){
+        if(c.isbn13){
           try{
             const r2=await fetch('/api/book?isbn='+encodeURIComponent(c.isbn13));
             const d2=await r2.json();
