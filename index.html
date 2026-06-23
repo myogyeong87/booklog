@@ -127,6 +127,12 @@
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:all .25s;z-index:50;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   .note{font-size:12px;color:var(--muted);text-align:center;margin-top:24px;line-height:1.6;}
+  .one-liner{font-style:italic;font-size:15px;border-left:3px solid var(--cloth);padding-left:12px;margin:6px 0 8px;color:var(--ink);line-height:1.5;}
+  .quote-block{font-size:13.5px;line-height:1.6;color:#3a3a32;margin-bottom:6px;}
+  .q-page-lbl{background:var(--mark);font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:4px;color:var(--ink);display:inline-block;}
+  .quote-row{display:flex;gap:6px;align-items:flex-start;margin-bottom:8px;}
+  .quote-row .q-text{flex:1;min-height:58px!important;}
+  input.q-page{width:54px!important;padding:8px 6px!important;font-size:13px!important;text-align:center;}
 </style>
 </head>
 <body>
@@ -192,7 +198,8 @@
       </div>
       <div class="field">
         <label>인상 깊은 구절</label>
-        <textarea id="fQuote" placeholder="직접 입력하거나, 아래에서 사진으로 가져오세요"></textarea>
+        <div id="quotesContainer"></div>
+        <button class="ghost" id="addQuoteBtn" type="button" style="margin-top:2px;font-size:13px;padding:8px 12px;">+ 구절 추가</button>
         <div class="ocr">
           <div class="hd"><span class="dot"></span> 사진에서 구절 가져오기 (드래그로 영역 선택)</div>
           <div class="acts">
@@ -208,6 +215,8 @@
       </div>
       <div class="field"><label>내 생각 · 감상</label>
         <textarea id="fThought" placeholder="이 책을 읽고 든 생각, 느낀 점을 적어보세요" style="min-height:110px;"></textarea></div>
+      <div class="field"><label>한줄평 <span class="hintlbl">· 이 책을 한 마디로</span></label>
+        <input type="text" id="fOneLiner" placeholder="예) 잃어버린 자아를 찾는 여정, 헤세가 건네는 위로"></div>
       <div class="field"><label>태그 <span class="hintlbl">· 쉼표로 구분 (예: 소설, 성장, 추천)</span></label>
         <input type="text" id="fTags" placeholder="소설, 성장, 추천"></div>
       <div class="field"><label>별점</label>
@@ -216,7 +225,7 @@
       <div class="footer"><button class="ghost" id="cancelBtn">취소</button><button id="saveBtn">기록 저장</button></div>
     </div>
 
-    <p class="note">기록은 Firestore에 안전하게 저장돼요 · OCR은 무료 오픈소스(Tesseract) · 표지·도서 정보 제공: 알라딘 인터넷서점(aladin.co.kr)</p>
+    <p class="note">도서 정보 제공: 알라딘 인터넷서점(aladin.co.kr)</p>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -302,7 +311,7 @@ function renderStats(){
 function visible(){
   let list=entries.slice();
   if(activeTag) list=list.filter(e=>(e.tags||[]).includes(activeTag));
-  if(q){const k=q.toLowerCase();list=list.filter(e=>[e.title,e.author,e.publisher,e.quote,e.thought,(e.tags||[]).join(' ')].some(f=>(f||'').toLowerCase().includes(k)));}
+  if(q){const k=q.toLowerCase();list=list.filter(e=>{const qts=(e.quotes||[]).map(r=>r.text||'').join(' ');return [e.title,e.author,e.publisher,e.quote||'',e.thought,e.oneLiner||'',qts,(e.tags||[]).join(' ')].some(f=>(f||'').toLowerCase().includes(k));});}
   list.sort((a,b)=>{
     if(sortMode==='old') return (a.date||'').localeCompare(b.date||'');
     if(sortMode==='rate') return (b.rating||0)-(a.rating||0)||(b.date||'').localeCompare(a.date||'');
@@ -326,10 +335,13 @@ function render(){
     const stars=e.rating?'<span class="stars">'+'★'.repeat(e.rating)+'☆'.repeat(5-e.rating)+'</span>':'<span></span>';
     const cover=e.cover?'<img class="cover" src="'+esc(e.cover)+'" alt="">':'<div class="cover">📖</div>';
     const tags=(e.tags&&e.tags.length)?'<div class="tags">'+e.tags.map(t=>'<span class="tag" data-tag="'+esc(t)+'">#'+esc(t)+'</span>').join('')+'</div>':'';
+    const oneLinerHtml=e.oneLiner?'<div class="one-liner">“'+esc(e.oneLiner)+'”</div>':'';
+    const qrows=e.quotes&&e.quotes.length?e.quotes:(e.quote?[{text:e.quote,page:''}]:[]);
+    const quotesHtml=qrows.map(r=>{if(!r.text)return '';const pg=r.page?'<span class="q-page-lbl">p.'+esc(r.page)+'</span>':'';return '<div class="quote-block">'+pg+'<span class="quote">'+esc(r.text)+'</span></div>';}).join('');
     return '<div class="card">'+cover+'<div class="body">'+
       '<div class="ttl">'+esc(e.title||'(제목 없음)')+'</div>'+
       '<div class="meta">'+[e.author,e.publisher,e.pages?e.pages+'쪽':null,e.date].filter(Boolean).map(esc).join(' · ')+'</div>'+
-      (e.quote?'<span class="quote">'+esc(e.quote)+'</span>':'')+
+      oneLinerHtml+quotesHtml+
       (e.thought?'<div class="thought">'+esc(e.thought)+'</div>':'')+tags+
       '<div class="row2">'+stars+'<div class="card-acts">'+
         '<button class="mini" data-edit="'+e.id+'">수정</button>'+
@@ -354,9 +366,12 @@ function openEditor(e){
   $('saveBtn').textContent=e?'수정 저장':'기록 저장';
   $('fTitle').value=e?e.title||'':''; $('fAuthor').value=e?e.author||'':'';
   $('fPublisher').value=e?e.publisher||'':''; $('fPages').value=e&&e.pages?e.pages:'';
-  $('fQuote').value=e?e.quote||'':''; $('fThought').value=e?e.thought||'':'';
+  $('fThought').value=e?e.thought||'':''; $('fOneLiner').value=e?e.oneLiner||'':'';
   $('fTags').value=e&&e.tags?e.tags.join(', '):'';
   $('fDate').value=(e&&e.date)?e.date:new Date().toISOString().slice(0,10);
+  $('quotesContainer').innerHTML='';
+  const qs0=e&&e.quotes?e.quotes:(e&&e.quote?[{text:e.quote,page:''}]:null);
+  (qs0&&qs0.length?qs0:[{text:'',page:''}]).forEach(r=>addQuoteRow(r.text||'',r.page||''));
   rating=e?e.rating||0:0; paintStars();
   coverUrl=e?e.cover||'':'';
   if(coverUrl){$('coverPrev').style.display='flex';$('coverPrev').innerHTML='<img src="'+esc(coverUrl)+'"><span>표지가 등록돼 있어요</span>';}
@@ -365,6 +380,16 @@ function openEditor(e){
   $('listView').style.display='none';$('editor').style.display='block';window.scrollTo(0,0);
 }
 function showList(){$('editor').style.display='none';$('listView').style.display='block';window.scrollTo(0,0);}
+function addQuoteRow(text='',page=''){
+  const row=document.createElement('div');row.className='quote-row';
+  const ta=document.createElement('textarea');ta.className='q-text';ta.placeholder='구절을 입력하세요';ta.value=text;
+  const pg=document.createElement('input');pg.type='text';pg.className='q-page';pg.placeholder='쪽';pg.value=page;
+  const dl=document.createElement('button');dl.className='mini del q-del';dl.type='button';dl.title='삭제';dl.textContent='✕';
+  dl.onclick=()=>{row.remove();if(!$('quotesContainer').children.length)addQuoteRow();};
+  row.appendChild(ta);row.appendChild(pg);row.appendChild(dl);$('quotesContainer').appendChild(row);
+}
+function getQuotes(){return [...$('quotesContainer').querySelectorAll('.quote-row')].map(r=>({text:r.querySelector('.q-text').value.trim(),page:r.querySelector('.q-page').value.trim()})).filter(r=>r.text);}
+$('addQuoteBtn').onclick=()=>addQuoteRow();
 $('newBtn').onclick=()=>openEditor(null);
 $('cancelBtn').onclick=showList;
 
@@ -435,7 +460,7 @@ $('extractBtn').onclick=async()=>{if(!sel)return;
     if(m.status==='recognizing text'){const p=Math.round(m.progress*100);$('barFill').style.width=p+'%';$('progLbl').textContent='글자 읽는 중… '+p+'%';}
     else $('progLbl').textContent=m.status+'…';}});}
     const {data}=await worker.recognize(crop());const text=(data.text||'').trim().replace(/\s*\n\s*/g,' ');
-    if(text){const cur=$('fQuote').value.trim();$('fQuote').value=cur?cur+'\n'+text:text;toast('구절에 추가했어요');}
+    if(text){const rows=$('quotesContainer').querySelectorAll('.quote-row');const lastTA=rows.length?rows[rows.length-1].querySelector('.q-text'):null;if(lastTA){const cur=lastTA.value.trim();lastTA.value=cur?cur+'\n'+text:text;}toast('구절에 추가했어요');}
     else toast('글자를 못 찾았어요 — 영역을 더 넓게 잡아보세요');
   }catch(e){console.error(e);toast('인식 중 오류');}
   finally{$('prog').style.display='none';$('extractBtn').disabled=false;}};
@@ -447,10 +472,11 @@ $('camInput').onchange=e=>loadFile(e.target.files[0]);
 /* ---------- 저장/삭제 (Firestore) ---------- */
 function parseTags(s){return [...new Set((s||'').split(',').map(t=>t.trim().replace(/^#/,'')).filter(Boolean))];}
 $('saveBtn').onclick=async()=>{
-  const title=$('fTitle').value.trim(),quote=$('fQuote').value.trim(),thought=$('fThought').value.trim();
-  if(!title&&!quote&&!thought){toast('제목이나 내용을 입력해주세요');return;}
+  const title=$('fTitle').value.trim(),thought=$('fThought').value.trim();
+  const quotesArr=getQuotes();
+  if(!title&&!thought&&!quotesArr.length){toast('제목이나 내용을 입력해주세요');return;}
   const pages=$('fPages').value?parseInt($('fPages').value,10)||0:0;
-  const payload={title,author:$('fAuthor').value.trim(),publisher:$('fPublisher').value.trim(),pages,cover:coverUrl,quote,thought,rating,tags:parseTags($('fTags').value),date:$('fDate').value};
+  const payload={title,author:$('fAuthor').value.trim(),publisher:$('fPublisher').value.trim(),pages,cover:coverUrl,quotes:quotesArr,oneLiner:$('fOneLiner').value.trim(),thought,rating,tags:parseTags($('fTags').value),date:$('fDate').value};
   $('saveBtn').disabled=true;
   try{
     if(editingId){ await setDoc(doc(db,'users',uid,'entries',editingId), payload, {merge:true}); toast('수정했어요'); }
