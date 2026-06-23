@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>나의 독서 기록</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+<style>
+  :root{
+    --paper:#F7F4EC; --panel:#FFFFFF;
+    --cloth:#1F4D3F; --cloth-2:#2E6651;
+    --ink:#23231E; --muted:#76786C; --line:#E5DFCF;
+    --mark:#FFE94D; --mark-deep:#E6CE00; --danger:#A8442E;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Pretendard",-apple-system,system-ui,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:680px;margin:0 auto;padding:24px 18px 90px;}
+
+  /* 로그인 화면 */
+  #authView{display:none;min-height:80vh;align-items:center;justify-content:center;}
+  .auth-card{text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:18px;
+    padding:40px 28px;max-width:360px;width:100%;}
+  .auth-card .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--cloth);font-weight:700;}
+  .auth-card h1{font-size:28px;margin:6px 0 4px;font-weight:800;font-family:"Nanum Myeongjo",Georgia,serif;}
+  .auth-card p{color:var(--muted);font-size:14px;margin:0 0 24px;}
+  .gbtn{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#23231E;border:1px solid #D8D2C2;
+    border-radius:10px;padding:12px 18px;font-weight:700;font-size:15px;cursor:pointer;}
+  .gbtn:hover{background:#FAF8F2;}
+  .gbtn svg{width:18px;height:18px;}
+  .auth-note{font-size:11.5px;color:var(--muted);margin-top:18px;line-height:1.5;}
+  .config-warn{display:none;background:#FBEBE6;border:1px solid #E8C3B7;color:#8A3A24;
+    border-radius:10px;padding:12px;font-size:12.5px;margin-bottom:18px;text-align:left;line-height:1.5;}
+
+  .topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px;}
+  .brand .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--cloth);font-weight:700;}
+  .brand h1{font-size:26px;margin:2px 0 0;font-weight:800;letter-spacing:-.01em;
+    font-family:"Nanum Myeongjo",Georgia,"Apple SD Gothic Neo",serif;}
+  .userchip{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);white-space:nowrap;}
+  .userchip button{background:none;border:none;color:var(--cloth);font-weight:700;cursor:pointer;font-size:12px;padding:2px 4px;}
+
+  button{font-family:inherit;font-weight:700;cursor:pointer;border-radius:10px;
+    border:1px solid var(--cloth);background:var(--cloth);color:#fff;font-size:14px;
+    padding:11px 16px;transition:opacity .15s,transform .05s,background .15s;}
+  button:active{transform:translateY(1px);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.ghost{background:transparent;color:var(--cloth);border-color:var(--line);}
+  button.ghost:hover{border-color:var(--cloth);}
+  button.block{width:100%;padding:13px;font-size:15px;}
+
+  .stats{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px;margin-bottom:16px;}
+  .stat-nums{display:flex;gap:8px;}
+  .stat{flex:1;text-align:center;}
+  .stat b{display:block;font-size:24px;font-weight:800;color:var(--cloth);line-height:1.1;font-family:"Nanum Myeongjo",Georgia,serif;}
+  .stat small{font-size:11.5px;color:var(--muted);font-weight:600;}
+  .minichart{display:flex;align-items:flex-end;gap:4px;height:54px;margin-top:14px;padding-top:4px;border-top:1px solid var(--line);}
+  .mc-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;}
+  .mc-bar{width:100%;max-width:16px;background:var(--cloth-2);border-radius:3px 3px 0 0;min-height:2px;transition:height .3s;}
+  .mc-bar.zero{background:var(--line);}
+  .mc-lbl{font-size:9px;color:var(--muted);}
+  .chart-cap{font-size:11px;color:var(--muted);font-weight:600;margin-top:10px;}
+
+  .controls{display:flex;gap:8px;margin-bottom:14px;}
+  .controls input{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:14px;background:var(--panel);color:var(--ink);}
+  .controls select{border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--panel);font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--mark);border-color:transparent;}
+  .filterbar{display:none;align-items:center;gap:8px;margin:-4px 0 14px;font-size:13px;color:var(--muted);}
+  .filterbar .clear{background:none;border:none;color:var(--cloth);font-weight:700;cursor:pointer;padding:2px 4px;font-size:13px;}
+
+  .empty{text-align:center;padding:56px 20px;color:var(--muted);}
+  .empty .ic{font-size:42px;} .empty p{font-weight:700;margin:14px 0 4px;color:var(--ink);} .empty small{font-size:13px;}
+  .card{display:flex;gap:14px;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--cloth);border-radius:12px;padding:14px;margin-bottom:14px;}
+  .cover{width:62px;height:88px;border-radius:5px;flex:0 0 auto;object-fit:cover;
+    background:linear-gradient(135deg,var(--cloth),var(--cloth-2));display:flex;align-items:center;justify-content:center;color:#cde3d8;font-size:22px;}
+  .card .body{flex:1;min-width:0;}
+  .card .ttl{font-weight:800;font-size:16px;line-height:1.3;font-family:"Nanum Myeongjo",Georgia,serif;}
+  .card .meta{font-size:12.5px;color:var(--muted);margin:2px 0 8px;}
+  .quote{font-size:13.5px;line-height:1.6;color:#3a3a32;background:linear-gradient(transparent 62%, var(--mark) 62%);display:inline;padding:0 1px;}
+  .thought{font-size:13.5px;line-height:1.6;color:#3a3a32;white-space:pre-wrap;margin-top:8px;}
+  .stars{color:var(--mark-deep);font-size:14px;letter-spacing:1px;}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;}
+  .tag{font-size:11px;font-weight:700;color:var(--cloth);background:#EAF1ED;border:1px solid #D6E4DC;padding:2px 8px;border-radius:99px;cursor:pointer;}
+  .tag:hover{background:#DCE9E2;}
+  .card .row2{display:flex;justify-content:space-between;align-items:center;margin-top:10px;}
+  .card-acts{display:flex;gap:4px;}
+  .mini{background:none;border:none;color:var(--muted);font-size:12px;font-weight:700;padding:4px 6px;cursor:pointer;}
+  .mini:hover{color:var(--cloth);} .mini.del:hover{color:var(--danger);}
+
+  .editor{display:none;}
+  .editor h2{font-size:18px;margin:0 0 18px;font-weight:800;font-family:"Nanum Myeongjo",Georgia,serif;}
+  .field{margin-bottom:16px;}
+  label{display:block;font-size:13px;font-weight:700;margin-bottom:6px;}
+  .hintlbl{font-weight:500;color:var(--muted);}
+  input[type=text],input[type=date],textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-family:inherit;font-size:15px;color:var(--ink);background:#FCFBF6;}
+  textarea{resize:vertical;min-height:70px;line-height:1.6;}
+  .ttl-row{display:flex;gap:8px;} .ttl-row input{flex:1;}
+  .preview-cover{display:flex;gap:12px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--muted);}
+  .preview-cover img{width:46px;height:64px;object-fit:cover;border-radius:4px;}
+  .rate{display:flex;gap:4px;font-size:26px;cursor:pointer;user-select:none;color:#D8D2C2;}
+  .rate span.on{color:var(--mark-deep);}
+  .ocr{border:1px dashed #CFC8B5;border-radius:10px;padding:12px;background:#FCFBF6;margin-top:10px;}
+  .ocr .hd{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--muted);}
+  .ocr .hd .dot{width:13px;height:13px;border-radius:3px;background:var(--mark);border:1px solid var(--mark-deep);}
+  .ocr .acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .ocr button{font-size:13px;padding:9px 13px;}
+  .canvas-box{position:relative;margin-top:10px;border-radius:10px;overflow:hidden;background:#000;line-height:0;touch-action:none;display:none;}
+  canvas{display:block;width:100%;height:auto;cursor:crosshair;}
+  .prog{display:none;margin-top:10px;} .prog .bar{height:5px;background:#EDE7D7;border-radius:99px;overflow:hidden;}
+  .prog .bar i{display:block;height:100%;width:0;background:var(--mark-deep);transition:width .2s;}
+  .prog .lbl{font-size:12px;color:var(--muted);margin-top:6px;font-weight:600;}
+  .editor .footer{display:flex;gap:10px;margin-top:8px;} .editor .footer button{flex:1;}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:all .25s;z-index:50;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .note{font-size:12px;color:var(--muted);text-align:center;margin-top:24px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== 로그인 화면 ===== -->
+  <div id="authView">
+    <div class="auth-card">
+      <div class="config-warn" id="configWarn">
+        ⚠️ Firebase 설정이 아직 안 들어갔어요. <code>index.html</code> 상단의
+        <code>firebaseConfig</code>를 본인 프로젝트 값으로 바꿔주세요. (SETUP.md 참고)
+      </div>
+      <div class="eyebrow">Reading Journal</div>
+      <h1>나의 독서 기록</h1>
+      <p>읽은 책의 한 구절과 내 생각을 차곡차곡.</p>
+      <button class="gbtn" id="signInBtn">
+        <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Google로 로그인
+      </button>
+      <p class="auth-note">기록은 본인 계정에만 저장되고, 다른 사람은 볼 수 없어요.</p>
+    </div>
+  </div>
+
+  <!-- ===== 앱 ===== -->
+  <div id="appView" style="display:none;">
+    <div class="topbar">
+      <div class="brand"><div class="eyebrow">Reading Journal</div><h1>나의 독서 기록</h1></div>
+      <div class="userchip"><span id="userEmail"></span><button id="signOutBtn">로그아웃</button></div>
+    </div>
+
+    <div id="listView">
+      <div class="stats" id="stats"></div>
+      <button class="block" id="newBtn">＋ 새 독서 기록</button>
+      <div class="controls" style="margin-top:16px;">
+        <input type="text" id="search" placeholder="제목·지은이·구절·태그 검색">
+        <select id="sort">
+          <option value="new">최신순</option>
+          <option value="old">오래된순</option>
+          <option value="rate">별점순</option>
+          <option value="title">제목순</option>
+        </select>
+      </div>
+      <div class="filterbar" id="filterbar"></div>
+      <div id="cards"></div>
+    </div>
+
+    <div class="editor" id="editor">
+      <h2 id="editorTitle">새 독서 기록</h2>
+      <div class="field">
+        <label>책 제목</label>
+        <div class="ttl-row">
+          <input type="text" id="fTitle" placeholder="예) 데미안">
+          <button class="ghost" id="lookupBtn">표지 찾기</button>
+        </div>
+        <div class="preview-cover" id="coverPrev" style="display:none;"></div>
+      </div>
+      <div class="field"><label>지은이</label><input type="text" id="fAuthor" placeholder="예) 헤르만 헤세"></div>
+      <div class="field">
+        <label>인상 깊은 구절</label>
+        <textarea id="fQuote" placeholder="직접 입력하거나, 아래에서 사진으로 가져오세요"></textarea>
+        <div class="ocr">
+          <div class="hd"><span class="dot"></span> 사진에서 구절 가져오기 (드래그로 영역 선택)</div>
+          <div class="acts">
+            <button class="ghost" id="pickBtn">사진 선택</button>
+            <button class="ghost" id="camBtn">카메라</button>
+            <button id="extractBtn" disabled>선택 영역 추출 → 구절에 추가</button>
+          </div>
+          <input type="file" id="fileInput" accept="image/*" hidden>
+          <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
+          <div class="canvas-box" id="canvasBox"><canvas id="canvas"></canvas></div>
+          <div class="prog" id="prog"><div class="bar"><i id="barFill"></i></div><div class="lbl" id="progLbl"></div></div>
+        </div>
+      </div>
+      <div class="field"><label>내 생각 · 감상</label>
+        <textarea id="fThought" placeholder="이 책을 읽고 든 생각, 느낀 점을 적어보세요" style="min-height:110px;"></textarea></div>
+      <div class="field"><label>태그 <span class="hintlbl">· 쉼표로 구분 (예: 소설, 성장, 추천)</span></label>
+        <input type="text" id="fTags" placeholder="소설, 성장, 추천"></div>
+      <div class="field"><label>별점</label>
+        <div class="rate" id="rate"><span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span></div></div>
+      <div class="field"><label>읽은 날짜</label><input type="date" id="fDate"></div>
+      <div class="footer"><button class="ghost" id="cancelBtn">취소</button><button id="saveBtn">기록 저장</button></div>
+    </div>
+
+    <p class="note">기록은 Firestore에 안전하게 저장돼요 · OCR은 무료 오픈소스(Tesseract) · 표지는 Google Books 자동 검색</p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getFirestore, collection, addDoc, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+/* ================== 1. 여기에 본인 Firebase 설정을 붙여넣으세요 ================== */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+/* ============================================================================== */
+
+const $ = id => document.getElementById(id);
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2000);}
+
+let auth=null, db=null, provider=null, uid=null, unsub=null;
+const configured = !firebaseConfig.apiKey.startsWith('YOUR_');
+
+if(configured){
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app); db = getFirestore(app); provider = new GoogleAuthProvider();
+  onAuthStateChanged(auth, user=>{
+    if(user){ uid=user.uid; $('userEmail').textContent=user.email||''; showApp(); subscribe(); }
+    else { uid=null; if(unsub){unsub();unsub=null;} showAuth(); }
+  });
+} else {
+  $('configWarn').style.display='block'; showAuth();
+}
+
+$('signInBtn').onclick=()=>{
+  if(!configured){toast('먼저 Firebase 설정을 넣어주세요');return;}
+  signInWithPopup(auth,provider).catch(e=>toast('로그인 실패: '+(e.code||e.message)));
+};
+$('signOutBtn').onclick=()=> signOut(auth);
+
+function showAuth(){$('authView').style.display='flex';$('appView').style.display='none';}
+function showApp(){$('authView').style.display='none';$('appView').style.display='block';showList();}
+
+/* ---------- Firestore 구독 ---------- */
+let entries=[];
+function subscribe(){
+  const qy = query(collection(db,'users',uid,'entries'), orderBy('createdAt','desc'));
+  unsub = onSnapshot(qy, snap=>{
+    entries = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    render();
+  }, err=> toast('불러오기 오류: '+err.code));
+}
+
+/* ---------- 상태 ---------- */
+let editingId=null, rating=0, coverUrl='', q='', sortMode='new', activeTag='';
+const canvas=$('canvas'), ctx=canvas.getContext('2d');
+let img=null, view={w:0,h:0}, sel=null, dragging=false, start=null, worker=null;
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------- 통계 ---------- */
+function renderStats(){
+  const yr=new Date().getFullYear();
+  const thisYear=entries.filter(e=>e.date&&e.date.slice(0,4)==String(yr));
+  const rated=entries.filter(e=>e.rating>0);
+  const avg=rated.length?(rated.reduce((s,e)=>s+e.rating,0)/rated.length).toFixed(1):'–';
+  const months=Array(12).fill(0);
+  thisYear.forEach(e=>{const m=parseInt(e.date.slice(5,7),10)-1;if(m>=0&&m<12)months[m]++;});
+  const max=Math.max(1,...months);
+  const bars=months.map((c,i)=>'<div class="mc-col"><div class="mc-bar'+(c?'':' zero')+'" style="height:'+(c?Math.round(c/max*100):6)+'%" title="'+(i+1)+'월 '+c+'권"></div><div class="mc-lbl">'+(i+1)+'</div></div>').join('');
+  $('stats').innerHTML='<div class="stat-nums">'+
+    '<div class="stat"><b>'+entries.length+'</b><small>전체</small></div>'+
+    '<div class="stat"><b>'+thisYear.length+'</b><small>'+yr+'년</small></div>'+
+    '<div class="stat"><b>'+avg+'</b><small>평균 별점</small></div></div>'+
+    '<div class="minichart">'+bars+'</div><div class="chart-cap">'+yr+'년 월별 독서량</div>';
+}
+
+/* ---------- 필터·정렬 ---------- */
+function visible(){
+  let list=entries.slice();
+  if(activeTag) list=list.filter(e=>(e.tags||[]).includes(activeTag));
+  if(q){const k=q.toLowerCase();list=list.filter(e=>[e.title,e.author,e.quote,e.thought,(e.tags||[]).join(' ')].some(f=>(f||'').toLowerCase().includes(k)));}
+  list.sort((a,b)=>{
+    if(sortMode==='old') return (a.date||'').localeCompare(b.date||'');
+    if(sortMode==='rate') return (b.rating||0)-(a.rating||0)||(b.date||'').localeCompare(a.date||'');
+    if(sortMode==='title') return (a.title||'').localeCompare(b.title||'','ko');
+    return (b.date||'').localeCompare(a.date||'');
+  });
+  return list;
+}
+
+function render(){
+  renderStats();
+  const fb=$('filterbar');
+  if(activeTag){fb.style.display='flex';
+    fb.innerHTML='태그 <span class="tag" style="cursor:default">#'+esc(activeTag)+'</span> 필터 중 <button class="clear" id="clearTag">전체 보기</button>';
+    $('clearTag').onclick=()=>{activeTag='';render();};
+  } else fb.style.display='none';
+  const list=visible(), box=$('cards');
+  if(!entries.length){box.innerHTML='<div class="empty"><div class="ic">📚</div><p>아직 기록이 없어요</p><small>읽은 책의 한 구절부터 남겨볼까요?</small></div>';return;}
+  if(!list.length){box.innerHTML='<div class="empty"><div class="ic">🔍</div><p>검색 결과가 없어요</p></div>';return;}
+  box.innerHTML=list.map(e=>{
+    const stars=e.rating?'<span class="stars">'+'★'.repeat(e.rating)+'☆'.repeat(5-e.rating)+'</span>':'<span></span>';
+    const cover=e.cover?'<img class="cover" src="'+esc(e.cover)+'" alt="">':'<div class="cover">📖</div>';
+    const tags=(e.tags&&e.tags.length)?'<div class="tags">'+e.tags.map(t=>'<span class="tag" data-tag="'+esc(t)+'">#'+esc(t)+'</span>').join('')+'</div>':'';
+    return '<div class="card">'+cover+'<div class="body">'+
+      '<div class="ttl">'+esc(e.title||'(제목 없음)')+'</div>'+
+      '<div class="meta">'+esc(e.author||'')+(e.author&&e.date?' · ':'')+esc(e.date||'')+'</div>'+
+      (e.quote?'<span class="quote">'+esc(e.quote)+'</span>':'')+
+      (e.thought?'<div class="thought">'+esc(e.thought)+'</div>':'')+tags+
+      '<div class="row2">'+stars+'<div class="card-acts">'+
+        '<button class="mini" data-edit="'+e.id+'">수정</button>'+
+        '<button class="mini del" data-del="'+e.id+'">삭제</button>'+
+      '</div></div></div></div>';
+  }).join('');
+  box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>removeEntry(b.dataset.del));
+  box.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const e=entries.find(x=>x.id==b.dataset.edit);if(e)openEditor(e);});
+  box.querySelectorAll('[data-tag]').forEach(b=>b.onclick=()=>{activeTag=b.dataset.tag;q='';$('search').value='';render();window.scrollTo(0,0);});
+}
+$('search').oninput=e=>{q=e.target.value.trim();render();};
+$('sort').onchange=e=>{sortMode=e.target.value;render();};
+
+/* ---------- 별점 ---------- */
+function paintStars(){$('rate').querySelectorAll('span').forEach(s=>s.classList.toggle('on',+s.dataset.v<=rating));}
+$('rate').querySelectorAll('span').forEach(s=>s.onclick=()=>{rating=(rating==+s.dataset.v)?+s.dataset.v-1:+s.dataset.v;paintStars();});
+
+/* ---------- 에디터 ---------- */
+function openEditor(e){
+  editingId=e?e.id:null;
+  $('editorTitle').textContent=e?'기록 수정':'새 독서 기록';
+  $('saveBtn').textContent=e?'수정 저장':'기록 저장';
+  $('fTitle').value=e?e.title||'':''; $('fAuthor').value=e?e.author||'':'';
+  $('fQuote').value=e?e.quote||'':''; $('fThought').value=e?e.thought||'':'';
+  $('fTags').value=e&&e.tags?e.tags.join(', '):'';
+  $('fDate').value=(e&&e.date)?e.date:new Date().toISOString().slice(0,10);
+  rating=e?e.rating||0:0; paintStars();
+  coverUrl=e?e.cover||'':'';
+  if(coverUrl){$('coverPrev').style.display='flex';$('coverPrev').innerHTML='<img src="'+esc(coverUrl)+'"><span>표지가 등록돼 있어요</span>';}
+  else $('coverPrev').style.display='none';
+  img=null;sel=null;$('canvasBox').style.display='none';$('extractBtn').disabled=true;
+  $('listView').style.display='none';$('editor').style.display='block';window.scrollTo(0,0);
+}
+function showList(){$('editor').style.display='none';$('listView').style.display='block';window.scrollTo(0,0);}
+$('newBtn').onclick=()=>openEditor(null);
+$('cancelBtn').onclick=showList;
+
+/* ---------- 표지 찾기 (Google Books, 키 불필요) ---------- */
+$('lookupBtn').onclick=async()=>{
+  const t=$('fTitle').value.trim(); if(!t){toast('먼저 책 제목을 입력해주세요');return;}
+  $('lookupBtn').disabled=true;$('lookupBtn').textContent='찾는 중…';
+  try{
+    const res=await fetch('https://www.googleapis.com/books/v1/volumes?country=KR&maxResults=1&q='+encodeURIComponent(t));
+    const data=await res.json(); const v=data.items&&data.items[0]&&data.items[0].volumeInfo;
+    if(v){
+      if(v.authors&&!$('fAuthor').value)$('fAuthor').value=v.authors.join(', ');
+      const th=v.imageLinks&&(v.imageLinks.thumbnail||v.imageLinks.smallThumbnail);
+      if(th){coverUrl=th.replace('http://','https://');$('coverPrev').style.display='flex';
+        $('coverPrev').innerHTML='<img src="'+coverUrl+'"><span>표지를 찾았어요 · 저장하면 함께 기록돼요</span>';}
+      else toast('표지 이미지는 없지만 정보는 채웠어요');
+    } else toast('검색 결과가 없어요 — 직접 입력해 주세요');
+  }catch(e){toast('표지를 못 불러왔어요');}
+  finally{$('lookupBtn').disabled=false;$('lookupBtn').textContent='표지 찾기';}
+};
+
+/* ---------- OCR ---------- */
+function loadFile(file){if(!file)return;const url=URL.createObjectURL(file);const im=new Image();im.onload=()=>{img=im;setupCanvas();URL.revokeObjectURL(url);};im.onerror=()=>toast('이미지를 불러오지 못했어요');im.src=url;}
+function setupCanvas(){$('canvasBox').style.display='block';sel=null;$('extractBtn').disabled=true;
+  const boxW=canvas.parentElement.clientWidth,ratio=img.naturalHeight/img.naturalWidth;
+  view.w=boxW;view.h=Math.round(boxW*ratio);const dpr=Math.min(window.devicePixelRatio||1,2);
+  canvas.width=view.w*dpr;canvas.height=view.h*dpr;canvas.style.height=view.h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
+function draw(){ctx.clearRect(0,0,view.w,view.h);ctx.drawImage(img,0,0,view.w,view.h);
+  if(sel){ctx.fillStyle='rgba(20,20,30,.45)';ctx.fillRect(0,0,view.w,view.h);
+    ctx.drawImage(img,sel.x/view.w*img.naturalWidth,sel.y/view.h*img.naturalHeight,sel.w/view.w*img.naturalWidth,sel.h/view.h*img.naturalHeight,sel.x,sel.y,sel.w,sel.h);
+    ctx.strokeStyle='#E6CE00';ctx.lineWidth=2;ctx.strokeRect(sel.x,sel.y,sel.w,sel.h);
+    ctx.fillStyle='rgba(255,233,77,.18)';ctx.fillRect(sel.x,sel.y,sel.w,sel.h);}}
+function pos(e){const r=canvas.getBoundingClientRect();const p=e.touches?e.touches[0]:e;return{x:Math.max(0,Math.min(view.w,p.clientX-r.left)),y:Math.max(0,Math.min(view.h,p.clientY-r.top))};}
+function down(e){if(!img)return;e.preventDefault();dragging=true;start=pos(e);sel=null;}
+function move(e){if(!dragging)return;e.preventDefault();const p=pos(e);sel={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(p.x-start.x),h:Math.abs(p.y-start.y)};draw();}
+function up(){if(!dragging)return;dragging=false;if(sel&&sel.w>12&&sel.h>12)$('extractBtn').disabled=false;else{sel=null;$('extractBtn').disabled=true;draw();}}
+canvas.addEventListener('mousedown',down);window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+canvas.addEventListener('touchstart',down,{passive:false});canvas.addEventListener('touchmove',move,{passive:false});canvas.addEventListener('touchend',up);
+function crop(){const sx=sel.x/view.w*img.naturalWidth,sy=sel.y/view.h*img.naturalHeight,sw=sel.w/view.w*img.naturalWidth,sh=sel.h/view.h*img.naturalHeight;
+  const c=document.createElement('canvas'),scale=sw<1000?2:1;c.width=sw*scale;c.height=sh*scale;
+  c.getContext('2d').drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);return c.toDataURL('image/png');}
+$('extractBtn').onclick=async()=>{if(!sel)return;
+  $('extractBtn').disabled=true;$('prog').style.display='block';$('barFill').style.width='0%';$('progLbl').textContent='엔진 준비 중… (처음엔 몇 초)';
+  try{if(!worker){worker=await Tesseract.createWorker('kor+eng',1,{logger:m=>{
+    if(m.status==='recognizing text'){const p=Math.round(m.progress*100);$('barFill').style.width=p+'%';$('progLbl').textContent='글자 읽는 중… '+p+'%';}
+    else $('progLbl').textContent=m.status+'…';}});}
+    const {data}=await worker.recognize(crop());const text=(data.text||'').trim().replace(/\s*\n\s*/g,' ');
+    if(text){const cur=$('fQuote').value.trim();$('fQuote').value=cur?cur+'\n'+text:text;toast('구절에 추가했어요');}
+    else toast('글자를 못 찾았어요 — 영역을 더 넓게 잡아보세요');
+  }catch(e){console.error(e);toast('인식 중 오류');}
+  finally{$('prog').style.display='none';$('extractBtn').disabled=false;}};
+$('pickBtn').onclick=()=>$('fileInput').click();
+$('camBtn').onclick=()=>$('camInput').click();
+$('fileInput').onchange=e=>loadFile(e.target.files[0]);
+$('camInput').onchange=e=>loadFile(e.target.files[0]);
+
+/* ---------- 저장/삭제 (Firestore) ---------- */
+function parseTags(s){return [...new Set((s||'').split(',').map(t=>t.trim().replace(/^#/,'')).filter(Boolean))];}
+$('saveBtn').onclick=async()=>{
+  const title=$('fTitle').value.trim(),quote=$('fQuote').value.trim(),thought=$('fThought').value.trim();
+  if(!title&&!quote&&!thought){toast('제목이나 내용을 입력해주세요');return;}
+  const payload={title,author:$('fAuthor').value.trim(),cover:coverUrl,quote,thought,rating,tags:parseTags($('fTags').value),date:$('fDate').value};
+  $('saveBtn').disabled=true;
+  try{
+    if(editingId){ await setDoc(doc(db,'users',uid,'entries',editingId), payload, {merge:true}); toast('수정했어요'); }
+    else { await addDoc(collection(db,'users',uid,'entries'), {...payload, createdAt:serverTimestamp()}); toast('기록을 저장했어요'); }
+    showList();  // 목록은 onSnapshot이 자동 갱신
+  }catch(e){toast('저장 실패: '+(e.code||e.message));}
+  finally{$('saveBtn').disabled=false;}
+};
+async function removeEntry(id){
+  if(!confirm('이 기록을 삭제할까요?'))return;
+  try{ await deleteDoc(doc(db,'users',uid,'entries',id)); }
+  catch(e){ toast('삭제 실패: '+(e.code||e.message)); }
+}
+</script>
+</body>
+</html>
