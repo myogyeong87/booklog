@@ -98,9 +98,11 @@
   .field{margin-bottom:16px;}
   label{display:block;font-size:13px;font-weight:700;margin-bottom:6px;}
   .hintlbl{font-weight:500;color:var(--muted);}
-  input[type=text],input[type=date],textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-family:inherit;font-size:15px;color:var(--ink);background:#FCFBF6;}
+  input[type=text],input[type=date],input[type=number],textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-family:inherit;font-size:15px;color:var(--ink);background:#FCFBF6;}
+  input[type=number]{-moz-appearance:textfield;} input[type=number]::-webkit-inner-spin-button{opacity:.4;}
   textarea{resize:vertical;min-height:70px;line-height:1.6;}
   .ttl-row{display:flex;gap:8px;} .ttl-row input{flex:1;}
+  .pub-row{display:flex;gap:8px;} .pub-row .pub-f{flex:1;} .pub-row .pages-f{flex:0 0 88px;}
   .preview-cover{display:flex;gap:10px;align-items:flex-start;margin-top:10px;font-size:12.5px;color:var(--muted);overflow-x:auto;padding-bottom:4px;}
   .preview-cover img{width:46px;height:64px;object-fit:cover;border-radius:4px;}
   .cand-thumb{flex:0 0 auto;text-align:center;cursor:pointer;}
@@ -182,6 +184,12 @@
         <div class="preview-cover" id="coverPrev" style="display:none;"></div>
       </div>
       <div class="field"><label>지은이</label><input type="text" id="fAuthor" placeholder="예) 헤르만 헤세"></div>
+      <div class="field">
+        <div class="pub-row">
+          <div class="pub-f"><label>출판사</label><input type="text" id="fPublisher" placeholder="예) 민음사"></div>
+          <div class="pages-f"><label>쪽수</label><input type="number" id="fPages" placeholder="264" min="1"></div>
+        </div>
+      </div>
       <div class="field">
         <label>인상 깊은 구절</label>
         <textarea id="fQuote" placeholder="직접 입력하거나, 아래에서 사진으로 가져오세요"></textarea>
@@ -294,7 +302,7 @@ function renderStats(){
 function visible(){
   let list=entries.slice();
   if(activeTag) list=list.filter(e=>(e.tags||[]).includes(activeTag));
-  if(q){const k=q.toLowerCase();list=list.filter(e=>[e.title,e.author,e.quote,e.thought,(e.tags||[]).join(' ')].some(f=>(f||'').toLowerCase().includes(k)));}
+  if(q){const k=q.toLowerCase();list=list.filter(e=>[e.title,e.author,e.publisher,e.quote,e.thought,(e.tags||[]).join(' ')].some(f=>(f||'').toLowerCase().includes(k)));}
   list.sort((a,b)=>{
     if(sortMode==='old') return (a.date||'').localeCompare(b.date||'');
     if(sortMode==='rate') return (b.rating||0)-(a.rating||0)||(b.date||'').localeCompare(a.date||'');
@@ -320,7 +328,7 @@ function render(){
     const tags=(e.tags&&e.tags.length)?'<div class="tags">'+e.tags.map(t=>'<span class="tag" data-tag="'+esc(t)+'">#'+esc(t)+'</span>').join('')+'</div>':'';
     return '<div class="card">'+cover+'<div class="body">'+
       '<div class="ttl">'+esc(e.title||'(제목 없음)')+'</div>'+
-      '<div class="meta">'+esc(e.author||'')+(e.author&&e.date?' · ':'')+esc(e.date||'')+'</div>'+
+      '<div class="meta">'+[e.author,e.publisher,e.pages?e.pages+'쪽':null,e.date].filter(Boolean).map(esc).join(' · ')+'</div>'+
       (e.quote?'<span class="quote">'+esc(e.quote)+'</span>':'')+
       (e.thought?'<div class="thought">'+esc(e.thought)+'</div>':'')+tags+
       '<div class="row2">'+stars+'<div class="card-acts">'+
@@ -345,6 +353,7 @@ function openEditor(e){
   $('editorTitle').textContent=e?'기록 수정':'새 독서 기록';
   $('saveBtn').textContent=e?'수정 저장':'기록 저장';
   $('fTitle').value=e?e.title||'':''; $('fAuthor').value=e?e.author||'':'';
+  $('fPublisher').value=e?e.publisher||'':''; $('fPages').value=e&&e.pages?e.pages:'';
   $('fQuote').value=e?e.quote||'':''; $('fThought').value=e?e.thought||'':'';
   $('fTags').value=e&&e.tags?e.tags.join(', '):'';
   $('fDate').value=(e&&e.date)?e.date:new Date().toISOString().slice(0,10);
@@ -359,7 +368,7 @@ function showList(){$('editor').style.display='none';$('listView').style.display
 $('newBtn').onclick=()=>openEditor(null);
 $('cancelBtn').onclick=showList;
 
-/* ---------- 표지 찾기 (알라딘 서버리스 함수 경유, 후보 선택) ---------- */
+/* ---------- 표지 찾기 (알라딘 서버리스, 후보 선택 + 정보 자동 입력) ---------- */
 $('lookupBtn').onclick=async()=>{
   const t=$('fTitle').value.trim(); if(!t){toast('먼저 책 제목을 입력해주세요');return;}
   $('lookupBtn').disabled=true;$('lookupBtn').textContent='찾는 중…';
@@ -378,13 +387,22 @@ $('lookupBtn').onclick=async()=>{
       '</div>';
     }).join('');
     $('coverPrev').querySelectorAll('.cand-thumb').forEach((el,i)=>{
-      el.onclick=()=>{
+      el.onclick=async()=>{
         const c=cands[i];
         coverUrl=c.cover;
+        if(!$('fTitle').value)$('fTitle').value=c.title;
         if(c.author&&!$('fAuthor').value)$('fAuthor').value=c.author;
+        if(c.publisher&&!$('fPublisher').value)$('fPublisher').value=c.publisher;
         $('coverPrev').querySelectorAll('.cand-thumb').forEach(x=>x.classList.remove('sel'));
         el.classList.add('sel');
         toast('표지를 선택했어요 · 저장하면 함께 기록돼요');
+        if(c.isbn13&&!$('fPages').value){
+          try{
+            const r2=await fetch('/api/book?isbn='+encodeURIComponent(c.isbn13));
+            const d2=await r2.json();
+            if(d2.page)$('fPages').value=d2.page;
+          }catch{}
+        }
       };
     });
   }catch(e){toast('표지를 못 불러왔어요');}
@@ -431,7 +449,8 @@ function parseTags(s){return [...new Set((s||'').split(',').map(t=>t.trim().repl
 $('saveBtn').onclick=async()=>{
   const title=$('fTitle').value.trim(),quote=$('fQuote').value.trim(),thought=$('fThought').value.trim();
   if(!title&&!quote&&!thought){toast('제목이나 내용을 입력해주세요');return;}
-  const payload={title,author:$('fAuthor').value.trim(),cover:coverUrl,quote,thought,rating,tags:parseTags($('fTags').value),date:$('fDate').value};
+  const pages=$('fPages').value?parseInt($('fPages').value,10)||0:0;
+  const payload={title,author:$('fAuthor').value.trim(),publisher:$('fPublisher').value.trim(),pages,cover:coverUrl,quote,thought,rating,tags:parseTags($('fTags').value),date:$('fDate').value};
   $('saveBtn').disabled=true;
   try{
     if(editingId){ await setDoc(doc(db,'users',uid,'entries',editingId), payload, {merge:true}); toast('수정했어요'); }
