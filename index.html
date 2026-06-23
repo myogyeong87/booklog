@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>키키의 책장</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1F4D3F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
 <style>
   :root{
@@ -96,8 +101,13 @@
   input[type=text],input[type=date],textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-family:inherit;font-size:15px;color:var(--ink);background:#FCFBF6;}
   textarea{resize:vertical;min-height:70px;line-height:1.6;}
   .ttl-row{display:flex;gap:8px;} .ttl-row input{flex:1;}
-  .preview-cover{display:flex;gap:12px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--muted);}
+  .preview-cover{display:flex;gap:10px;align-items:flex-start;margin-top:10px;font-size:12.5px;color:var(--muted);overflow-x:auto;padding-bottom:4px;}
   .preview-cover img{width:46px;height:64px;object-fit:cover;border-radius:4px;}
+  .cand-thumb{flex:0 0 auto;text-align:center;cursor:pointer;}
+  .cand-thumb img{width:62px;height:88px;object-fit:cover;border-radius:6px;border:2.5px solid transparent;display:block;transition:border-color .15s,transform .1s;}
+  .cand-thumb:hover img{border-color:var(--cloth-2);transform:translateY(-2px);}
+  .cand-thumb.sel img{border-color:var(--cloth);box-shadow:0 0 0 2px var(--mark);}
+  .cand-meta{font-size:10px;color:var(--muted);margin-top:4px;width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .rate{display:flex;gap:4px;font-size:26px;cursor:pointer;user-select:none;color:#D8D2C2;}
   .rate span.on{color:var(--mark-deep);}
   .ocr{border:1px dashed #CFC8B5;border-radius:10px;padding:12px;background:#FCFBF6;margin-top:10px;}
@@ -349,21 +359,34 @@ function showList(){$('editor').style.display='none';$('listView').style.display
 $('newBtn').onclick=()=>openEditor(null);
 $('cancelBtn').onclick=showList;
 
-/* ---------- 표지 찾기 (알라딘 서버리스 함수 경유) ---------- */
+/* ---------- 표지 찾기 (알라딘 서버리스 함수 경유, 후보 선택) ---------- */
 $('lookupBtn').onclick=async()=>{
   const t=$('fTitle').value.trim(); if(!t){toast('먼저 책 제목을 입력해주세요');return;}
   $('lookupBtn').disabled=true;$('lookupBtn').textContent='찾는 중…';
   try{
     const res=await fetch('/api/book?q='+encodeURIComponent(t));
     const data=await res.json();
-    if(data.found){
-      if(data.author && !$('fAuthor').value) $('fAuthor').value=data.author;
-      if(data.cover){
-        coverUrl=data.cover;
-        $('coverPrev').style.display='flex';
-        $('coverPrev').innerHTML='<img src="'+coverUrl+'"><span>표지를 찾았어요 · 저장하면 함께 기록돼요</span>';
-      } else toast('표지 이미지는 없지만 정보는 채웠어요');
-    } else toast('검색 결과가 없어요 — 직접 입력해 주세요');
+    const cands=data.candidates||[];
+    if(!cands.length){toast('검색 결과가 없어요 — 직접 입력해 주세요');$('coverPrev').style.display='none';return;}
+    coverUrl='';
+    $('coverPrev').style.display='flex';
+    $('coverPrev').innerHTML=cands.map((_,i)=>{
+      const c=cands[i];
+      return '<div class="cand-thumb" data-i="'+i+'">'+
+        '<img src="'+c.cover+'" alt="'+esc(c.title)+'">'+
+        '<div class="cand-meta">'+esc(c.publisher||c.author||'')+'</div>'+
+      '</div>';
+    }).join('');
+    $('coverPrev').querySelectorAll('.cand-thumb').forEach((el,i)=>{
+      el.onclick=()=>{
+        const c=cands[i];
+        coverUrl=c.cover;
+        if(c.author&&!$('fAuthor').value)$('fAuthor').value=c.author;
+        $('coverPrev').querySelectorAll('.cand-thumb').forEach(x=>x.classList.remove('sel'));
+        el.classList.add('sel');
+        toast('표지를 선택했어요 · 저장하면 함께 기록돼요');
+      };
+    });
   }catch(e){toast('표지를 못 불러왔어요');}
   finally{$('lookupBtn').disabled=false;$('lookupBtn').textContent='표지 찾기';}
 };
@@ -421,6 +444,10 @@ async function removeEntry(id){
   if(!confirm('이 기록을 삭제할까요?'))return;
   try{ await deleteDoc(doc(db,'users',uid,'entries',id)); }
   catch(e){ toast('삭제 실패: '+(e.code||e.message)); }
+}
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 }
 </script>
 </body>
