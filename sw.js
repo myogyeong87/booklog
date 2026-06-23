@@ -1,4 +1,4 @@
-const CACHE = 'booklog-v1';
+const CACHE = 'booklog-v2';
 const SHELL = [
   '/',
   '/index.html',
