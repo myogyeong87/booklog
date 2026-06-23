@@ -198,7 +198,7 @@
       <div class="footer"><button class="ghost" id="cancelBtn">취소</button><button id="saveBtn">기록 저장</button></div>
     </div>
 
-    <p class="note">기록은 Firestore에 안전하게 저장돼요 · OCR은 무료 오픈소스(Tesseract) · 표지는 Google Books 자동 검색</p>
+    <p class="note">기록은 Firestore에 안전하게 저장돼요 · OCR은 무료 오픈소스(Tesseract) · 표지·도서 정보 제공: 알라딘 인터넷서점(aladin.co.kr)</p>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -349,19 +349,20 @@ function showList(){$('editor').style.display='none';$('listView').style.display
 $('newBtn').onclick=()=>openEditor(null);
 $('cancelBtn').onclick=showList;
 
-/* ---------- 표지 찾기 (Google Books, 키 불필요) ---------- */
+/* ---------- 표지 찾기 (알라딘 서버리스 함수 경유) ---------- */
 $('lookupBtn').onclick=async()=>{
   const t=$('fTitle').value.trim(); if(!t){toast('먼저 책 제목을 입력해주세요');return;}
   $('lookupBtn').disabled=true;$('lookupBtn').textContent='찾는 중…';
   try{
-    const res=await fetch('https://www.googleapis.com/books/v1/volumes?country=KR&maxResults=1&q='+encodeURIComponent(t));
-    const data=await res.json(); const v=data.items&&data.items[0]&&data.items[0].volumeInfo;
-    if(v){
-      if(v.authors&&!$('fAuthor').value)$('fAuthor').value=v.authors.join(', ');
-      const th=v.imageLinks&&(v.imageLinks.thumbnail||v.imageLinks.smallThumbnail);
-      if(th){coverUrl=th.replace('http://','https://');$('coverPrev').style.display='flex';
-        $('coverPrev').innerHTML='<img src="'+coverUrl+'"><span>표지를 찾았어요 · 저장하면 함께 기록돼요</span>';}
-      else toast('표지 이미지는 없지만 정보는 채웠어요');
+    const res=await fetch('/api/book?q='+encodeURIComponent(t));
+    const data=await res.json();
+    if(data.found){
+      if(data.author && !$('fAuthor').value) $('fAuthor').value=data.author;
+      if(data.cover){
+        coverUrl=data.cover;
+        $('coverPrev').style.display='flex';
+        $('coverPrev').innerHTML='<img src="'+coverUrl+'"><span>표지를 찾았어요 · 저장하면 함께 기록돼요</span>';
+      } else toast('표지 이미지는 없지만 정보는 채웠어요');
     } else toast('검색 결과가 없어요 — 직접 입력해 주세요');
   }catch(e){toast('표지를 못 불러왔어요');}
   finally{$('lookupBtn').disabled=false;$('lookupBtn').textContent='표지 찾기';}
