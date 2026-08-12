@@ -159,15 +159,20 @@
   .stars{color:var(--mark-deep);font-size:14px;letter-spacing:1px;}
   .one-liner{font-style:italic;font-size:15px;border-left:3px solid var(--cloth);padding-left:12px;
     margin:4px 0 8px;color:var(--ink);line-height:1.5;}
-  .quote-block{border-left:3px solid var(--mark);padding-left:10px;margin-bottom:10px;
+  .quote-block{border-left:3px solid var(--mark);padding-left:10px;margin-bottom:4px;
     color:#4a4a42;line-height:1.7;font-size:13.5px;}
   .q-page-lbl{background:#FFF3B0;color:var(--cloth);font-size:11px;font-weight:700;
     padding:2px 8px;border-radius:99px;display:block;width:fit-content;margin-bottom:4px;}
+  .quote-note{background:#F1EFE8;border-radius:8px;padding:6px 10px;margin:0 0 10px 13px;
+    font-size:12px;color:#4a4a42;line-height:1.5;}
+  .quote-note .qn-lbl{color:var(--cloth);font-weight:700;margin-right:4px;}
 
   /* 에디터 구절 행 */
-  .quote-row{display:flex;gap:6px;align-items:flex-start;margin-bottom:8px;}
+  .quote-item{margin-bottom:10px;}
+  .quote-row{display:flex;gap:6px;align-items:flex-start;margin-bottom:4px;}
   .quote-row .q-text{flex:1;min-height:58px!important;}
   input.q-page{width:54px!important;padding:8px 6px!important;font-size:13px!important;text-align:center;}
+  input.q-note{width:100%!important;padding:7px 10px!important;font-size:12px!important;background:#FCFBF6;}
 
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:all .25s;z-index:50;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -451,7 +456,8 @@ function renderDetail(e){
       qrows.map(r=>{
         if(!r||!r.text)return '';
         const pg=r.page?'<span class="q-page-lbl">p.'+esc(r.page)+'</span>':'';
-        return '<div class="quote-block">'+pg+'<span class="quote">'+esc(r.text)+'</span></div>';
+        const noteHtml=r.note?'<div class="quote-note"><span class="qn-lbl">✎ 메모</span>'+esc(r.note)+'</div>':'';
+        return '<div class="quote-block">'+pg+'<span class="quote">'+esc(r.text)+'</span></div>'+noteHtml;
       }).join('')+'</div>'
     :'';
 
@@ -500,7 +506,7 @@ function openEditor(e){
   $('fDate').value=(e&&e.date)?e.date:new Date().toISOString().slice(0,10);
   $('quotesContainer').innerHTML='';
   const qs0=e&&e.quotes?e.quotes:(e&&e.quote?[{text:e.quote,page:''}]:null);
-  (qs0&&qs0.length?qs0:[{text:'',page:''}]).forEach(r=>addQuoteRow(r.text||'',r.page||''));
+  (qs0&&qs0.length?qs0:[{text:'',page:'',note:''}]).forEach(r=>addQuoteRow(r.text||'',r.page||'',r.note||''));
   rating=e?e.rating||0:0; paintStars();
   coverUrl=e?e.cover||'':'';
   if(coverUrl){$('coverPrev').style.display='flex';$('coverPrev').innerHTML='<img src="'+esc(coverUrl)+'"><span>표지가 등록돼 있어요</span>';}
@@ -510,15 +516,20 @@ function openEditor(e){
   $('editor').style.display='block';window.scrollTo(0,0);
 }
 
-function addQuoteRow(text='',page=''){
+function addQuoteRow(text='',page='',note=''){
+  const item=document.createElement('div');item.className='quote-item';
   const row=document.createElement('div');row.className='quote-row';
   const ta=document.createElement('textarea');ta.className='q-text';ta.placeholder='구절을 입력하세요';ta.value=text;
   const pg=document.createElement('input');pg.type='text';pg.className='q-page';pg.placeholder='쪽';pg.value=page;
   const dl=document.createElement('button');dl.className='mini del q-del';dl.type='button';dl.title='삭제';dl.textContent='✕';
-  dl.onclick=()=>{row.remove();if(!$('quotesContainer').children.length)addQuoteRow();};
-  row.appendChild(ta);row.appendChild(pg);row.appendChild(dl);$('quotesContainer').appendChild(row);
+  const nt=document.createElement('input');nt.type='text';nt.className='q-note';nt.placeholder='메모 (선택)';nt.value=note;
+  dl.onclick=()=>{item.remove();if(!$('quotesContainer').children.length)addQuoteRow();saveDraft();};
+  row.appendChild(ta);row.appendChild(pg);row.appendChild(dl);
+  item.appendChild(row);item.appendChild(nt);
+  $('quotesContainer').appendChild(item);
 }
-function getQuotes(){return [...$('quotesContainer').querySelectorAll('.quote-row')].map(r=>({text:r.querySelector('.q-text').value.trim(),page:r.querySelector('.q-page').value.trim()})).filter(r=>r.text);}
+function getQuotes(){return [...$('quotesContainer').querySelectorAll('.quote-item')].map(r=>({text:r.querySelector('.q-text').value.trim(),page:r.querySelector('.q-page').value.trim(),note:r.querySelector('.q-note').value.trim()})).filter(r=>r.text);}
+function getQuotesRaw(){return [...$('quotesContainer').querySelectorAll('.quote-item')].map(r=>({text:r.querySelector('.q-text').value,page:r.querySelector('.q-page').value,note:r.querySelector('.q-note').value}));}
 $('addQuoteBtn').onclick=()=>addQuoteRow();
 $('newBtn').onclick=()=>openEditor(null);
 $('cancelBtn').onclick=()=>{
