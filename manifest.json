@@ -1,6 +1,6 @@
 {
-  "name": "나의 독서 기록",
-  "short_name": "독서록",
+  "name": "키키의 책장",
+  "short_name": "책장",
   "description": "읽은 책의 한 구절과 내 생각을 차곡차곡.",
   "start_url": "/",
   "display": "standalone",
