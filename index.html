@@ -559,7 +559,7 @@ $('lookupBtn').onclick=async()=>{
       el.onclick=async()=>{
         const c=cands[i];
         coverUrl=c.cover;
-        if(!$('fTitle').value)$('fTitle').value=c.title;
+        $('fTitle').value=c.title;
         if(c.author)$('fAuthor').value=c.author;
         if(c.publisher)$('fPublisher').value=c.publisher;
         $('coverPrev').querySelectorAll('.cand-thumb').forEach(x=>x.classList.remove('sel'));
