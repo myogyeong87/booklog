@@ -320,7 +320,7 @@ if(configured){
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app); db = getFirestore(app); provider = new GoogleAuthProvider();
   onAuthStateChanged(auth, user=>{
-    if(user){ uid=user.uid; $('userEmail').textContent=user.email||''; showApp(); subscribe(); }
+    if(user){ uid=user.uid; $('userEmail').textContent=user.email||''; showApp(); subscribe(); attemptInitialRestore(); }
     else { uid=null; if(unsub){unsub();unsub=null;} showAuth(); }
   });
 } else {
@@ -343,14 +343,63 @@ function subscribe(){
   unsub = onSnapshot(qy, snap=>{
     entries = snap.docs.map(d=>({id:d.id, ...d.data()}));
     render();
+    if(pendingRestore && pendingRestore.screen==='detail' && pendingRestore.detailId){
+      const rid=pendingRestore.detailId; pendingRestore=null;
+      if(entries.find(x=>x.id===rid)) showDetail(rid);
+    }
   }, err=> toast('불러오기 오류: '+err.code));
 }
 
 /* ---------- 상태 ---------- */
 let editingId=null, rating=0, coverUrl='', q='', sortMode='new', activeTag='', currentDetailId=null;
+let currentScreen='shelf';
 const canvas=$('canvas'), ctx=canvas.getContext('2d');
 let img=null, view={w:0,h:0}, sel=null, dragging=false, start=null, worker=null;
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------- 화면·입력 임시 저장 (앱 전환 후 복귀 시 복원) ---------- */
+const DRAFT_KEY='booklogDraftV1';
+function saveDraft(){
+  try{
+    let payload;
+    if(currentScreen==='editor'){
+      payload={screen:'editor',editingId,returnDetailId:currentDetailId,
+        title:$('fTitle').value, author:$('fAuthor').value, publisher:$('fPublisher').value,
+        pages:$('fPages').value, thought:$('fThought').value, oneLiner:$('fOneLiner').value,
+        tags:$('fTags').value, date:$('fDate').value, rating, coverUrl,
+        quotes:getQuotesRaw()};
+    } else if(currentScreen==='detail'){
+      payload={screen:'detail', detailId:currentDetailId};
+    } else {
+      payload={screen:'shelf'};
+    }
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+  }catch(err){}
+}
+function clearDraft(){ try{sessionStorage.removeItem(DRAFT_KEY);}catch(err){} }
+function loadDraft(){
+  try{const raw=sessionStorage.getItem(DRAFT_KEY); return raw?JSON.parse(raw):null;}catch(err){return null;}
+}
+let pendingRestore=loadDraft();
+function attemptInitialRestore(){
+  if(!pendingRestore) return;
+  if(pendingRestore.screen==='editor'){
+    restoreEditorFromDraft(pendingRestore);
+    pendingRestore=null;
+  }
+  // screen==='detail'인 경우는 Firestore 데이터 로드 후 subscribe()에서 복원
+}
+function tryRestoreIfNeeded(){
+  const d=loadDraft();
+  if(!d) return;
+  if(d.screen==='editor' && currentScreen!=='editor'){
+    restoreEditorFromDraft(d);
+  } else if(d.screen==='detail' && currentScreen==='shelf' && entries.length){
+    showDetail(d.detailId);
+  }
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') tryRestoreIfNeeded(); });
+window.addEventListener('pageshow', tryRestoreIfNeeded);
 
 /* ---------- 통계 ---------- */
 function renderStats(){
@@ -422,10 +471,12 @@ $('sort').onchange=e=>{sortMode=e.target.value;render();};
 
 /* ---------- 뷰 전환 ---------- */
 function showShelf(){
+  currentScreen='shelf';
   $('shelfView').style.display='block';
   $('detailView').style.display='none';
   $('editor').style.display='none';
   window.scrollTo(0,0);
+  saveDraft();
 }
 function showList(){showShelf();}  // 하위 호환
 
@@ -433,11 +484,13 @@ function showDetail(id){
   const e=entries.find(x=>x.id===id);
   if(!e){showShelf();return;}
   currentDetailId=id;
+  currentScreen='detail';
   renderDetail(e);
   $('shelfView').style.display='none';
   $('detailView').style.display='block';
   $('editor').style.display='none';
   window.scrollTo(0,0);
+  saveDraft();
 }
 
 /* ---------- 상세 화면 렌더 ---------- */
@@ -492,28 +545,54 @@ $('backBtn').onclick=showShelf;
 
 /* ---------- 별점 ---------- */
 function paintStars(){$('rate').querySelectorAll('span').forEach(s=>s.classList.toggle('on',+s.dataset.v<=rating));}
-$('rate').querySelectorAll('span').forEach(s=>s.onclick=()=>{rating=(rating==+s.dataset.v)?+s.dataset.v-1:+s.dataset.v;paintStars();});
+$('rate').querySelectorAll('span').forEach(s=>s.onclick=()=>{rating=(rating==+s.dataset.v)?+s.dataset.v-1:+s.dataset.v;paintStars();saveDraft();});
 
 /* ---------- 에디터 ---------- */
 function openEditor(e){
-  editingId=e?e.id:null;
-  $('editorTitle').textContent=e?'기록 수정':'새 독서 기록';
-  $('saveBtn').textContent=e?'수정 저장':'기록 저장';
-  $('fTitle').value=e?e.title||'':''; $('fAuthor').value=e?e.author||'':'';
-  $('fPublisher').value=e?e.publisher||'':''; $('fPages').value=e&&e.pages?e.pages:'';
-  $('fThought').value=e?e.thought||'':''; $('fOneLiner').value=e?e.oneLiner||'':'';
-  $('fTags').value=e&&e.tags?e.tags.join(', '):'';
-  $('fDate').value=(e&&e.date)?e.date:new Date().toISOString().slice(0,10);
+  const d=e?{
+    editingId:e.id, title:e.title||'', author:e.author||'', publisher:e.publisher||'',
+    pages:e.pages||'', thought:e.thought||'', oneLiner:e.oneLiner||'',
+    tags:e.tags?e.tags.join(', '):'', date:e.date||new Date().toISOString().slice(0,10),
+    quotes:e.quotes?e.quotes:(e.quote?[{text:e.quote,page:''}]:null),
+    rating:e.rating||0, coverUrl:e.cover||''
+  }:{
+    editingId:null, title:'', author:'', publisher:'', pages:'', thought:'', oneLiner:'',
+    tags:'', date:new Date().toISOString().slice(0,10), quotes:null, rating:0, coverUrl:''
+  };
+  populateEditor(d);
+}
+
+function restoreEditorFromDraft(d){
+  currentDetailId=d.returnDetailId||null;
+  populateEditor({
+    editingId:d.editingId||null, title:d.title||'', author:d.author||'', publisher:d.publisher||'',
+    pages:d.pages||'', thought:d.thought||'', oneLiner:d.oneLiner||'', tags:d.tags||'',
+    date:d.date||new Date().toISOString().slice(0,10),
+    quotes:d.quotes&&d.quotes.length?d.quotes:null,
+    rating:d.rating||0, coverUrl:d.coverUrl||''
+  });
+  toast('작성 중이던 내용을 복원했어요');
+}
+
+function populateEditor(d){
+  editingId=d.editingId;
+  $('editorTitle').textContent=editingId?'기록 수정':'새 독서 기록';
+  $('saveBtn').textContent=editingId?'수정 저장':'기록 저장';
+  $('fTitle').value=d.title; $('fAuthor').value=d.author;
+  $('fPublisher').value=d.publisher; $('fPages').value=d.pages;
+  $('fThought').value=d.thought; $('fOneLiner').value=d.oneLiner;
+  $('fTags').value=d.tags; $('fDate').value=d.date;
   $('quotesContainer').innerHTML='';
-  const qs0=e&&e.quotes?e.quotes:(e&&e.quote?[{text:e.quote,page:''}]:null);
-  (qs0&&qs0.length?qs0:[{text:'',page:'',note:''}]).forEach(r=>addQuoteRow(r.text||'',r.page||'',r.note||''));
-  rating=e?e.rating||0:0; paintStars();
-  coverUrl=e?e.cover||'':'';
+  (d.quotes&&d.quotes.length?d.quotes:[{text:'',page:'',note:''}]).forEach(r=>addQuoteRow(r.text||'',r.page||'',r.note||''));
+  rating=d.rating; paintStars();
+  coverUrl=d.coverUrl;
   if(coverUrl){$('coverPrev').style.display='flex';$('coverPrev').innerHTML='<img src="'+esc(coverUrl)+'"><span>표지가 등록돼 있어요</span>';}
   else $('coverPrev').style.display='none';
   img=null;sel=null;$('canvasBox').style.display='none';$('extractBtn').disabled=true;
+  currentScreen='editor';
   $('shelfView').style.display='none';$('detailView').style.display='none';
   $('editor').style.display='block';window.scrollTo(0,0);
+  saveDraft();
 }
 
 function addQuoteRow(text='',page='',note=''){
@@ -530,12 +609,15 @@ function addQuoteRow(text='',page='',note=''){
 }
 function getQuotes(){return [...$('quotesContainer').querySelectorAll('.quote-item')].map(r=>({text:r.querySelector('.q-text').value.trim(),page:r.querySelector('.q-page').value.trim(),note:r.querySelector('.q-note').value.trim()})).filter(r=>r.text);}
 function getQuotesRaw(){return [...$('quotesContainer').querySelectorAll('.quote-item')].map(r=>({text:r.querySelector('.q-text').value,page:r.querySelector('.q-page').value,note:r.querySelector('.q-note').value}));}
-$('addQuoteBtn').onclick=()=>addQuoteRow();
+$('addQuoteBtn').onclick=()=>{addQuoteRow();saveDraft();};
 $('newBtn').onclick=()=>openEditor(null);
 $('cancelBtn').onclick=()=>{
+  clearDraft();
   if(currentDetailId) showDetail(currentDetailId);
   else showShelf();
 };
+$('editor').addEventListener('input', ()=>{if(currentScreen==='editor')saveDraft();});
+$('editor').addEventListener('change', ()=>{if(currentScreen==='editor')saveDraft();});
 
 /* ---------- 표지 찾기 (알라딘 서버리스) ---------- */
 $('lookupBtn').onclick=async()=>{
@@ -565,11 +647,13 @@ $('lookupBtn').onclick=async()=>{
         $('coverPrev').querySelectorAll('.cand-thumb').forEach(x=>x.classList.remove('sel'));
         el.classList.add('sel');
         toast('표지를 선택했어요 · 저장하면 함께 기록돼요');
+        saveDraft();
         if(c.isbn13){
           try{
             const r2=await fetch('/api/book?isbn='+encodeURIComponent(c.isbn13));
             const d2=await r2.json();
             if(d2.page)$('fPages').value=d2.page;
+            saveDraft();
           }catch{}
         }
       };
@@ -604,7 +688,7 @@ $('extractBtn').onclick=async()=>{if(!sel)return;
     if(m.status==='recognizing text'){const p=Math.round(m.progress*100);$('barFill').style.width=p+'%';$('progLbl').textContent='글자 읽는 중… '+p+'%';}
     else $('progLbl').textContent=m.status+'…';}});}
     const {data}=await worker.recognize(crop());const text=(data.text||'').trim().replace(/\s*\n\s*/g,' ');
-    if(text){const rows=$('quotesContainer').querySelectorAll('.quote-row');const lastTA=rows.length?rows[rows.length-1].querySelector('.q-text'):null;if(lastTA){const cur=lastTA.value.trim();lastTA.value=cur?cur+'\n'+text:text;}toast('구절에 추가했어요');}
+    if(text){const rows=$('quotesContainer').querySelectorAll('.quote-row');const lastTA=rows.length?rows[rows.length-1].querySelector('.q-text'):null;if(lastTA){const cur=lastTA.value.trim();lastTA.value=cur?cur+'\n'+text:text;}toast('구절에 추가했어요');saveDraft();}
     else toast('글자를 못 찾았어요 — 영역을 더 넓게 잡아보세요');
   }catch(e){console.error(e);toast('인식 중 오류');}
   finally{$('prog').style.display='none';$('extractBtn').disabled=false;}};
@@ -626,10 +710,12 @@ $('saveBtn').onclick=async()=>{
     if(editingId){
       await setDoc(doc(db,'users',uid,'entries',editingId), payload, {merge:true});
       toast('수정했어요');
+      clearDraft();
       showDetail(editingId);
     } else {
       await addDoc(collection(db,'users',uid,'entries'), {...payload, createdAt:serverTimestamp()});
       toast('기록을 저장했어요');
+      clearDraft();
       showShelf();
     }
   }catch(e){toast('저장 실패: '+(e.code||e.message));}
